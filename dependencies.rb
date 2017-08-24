@@ -1,11 +1,29 @@
 require 'httparty'
+require 'nitlink/response'
 
-github_repos_url = 'https://api.github.com/users/tomnatt/repos'
-response_json = HTTParty.get(github_repos_url).body
+# github_repos_url = 'https://api.github.com/users/tomnatt/repos?per_page=10&page=1'
+github_repos_url = 'https://api.github.com/orgs/alphagov/repos?per_page=100&page=1'
+if ENV['GITHUB_API_TOKEN']
+  github_repos_url += "&access_token=#{ENV['GITHUB_API_TOKEN']}"
+end
 
-# Skip everything except ruby for now
-repos = JSON.parse(response_json).map { |repo| repo['full_name'] if repo['language'] == 'Ruby' }
+repos = []
+
+loop do
+  response = HTTParty.get(github_repos_url)
+  # Skip everything except ruby for now
+  repos += JSON.parse(response.body).map { |repo| repo['full_name'] if repo['language'] == 'Ruby' }
+  # repos += JSON.parse(response.body)
+
+  break if response.links.by_rel('next').nil?
+
+  github_repos_url = response.links.by_rel('next').target
+end
+
 repos.reject!(&:nil?)
+
+# While testing to avoid hammering libraries.io
+repos = repos.first(5)
 
 repos.each do |repo_name|
   libraries_url = "https://libraries.io/api/github/#{repo_name}/dependencies?api_key=#{ENV['LIBRARIES_API_KEY']}"
